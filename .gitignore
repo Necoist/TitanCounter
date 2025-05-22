@@ -1,174 +1,279 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+from phBot import *
+import QtBind
+import math
+from threading import Timer
+from datetime import datetime  # Saat ve dakika bilgisi için
 
-# C extensions
-*.so
+# GUI oluştur
+gui = QtBind.init(__name__, "Titan Tracker")
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# Titan Counter Sol Taraf
+lblRadius = QtBind.createLabel(gui, "Radius:", 10, 10)
+tbxRadius = QtBind.createLineEdit(gui, "30", 60, 8, 50, 20)  # Varsayılan yarıçap değeri
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+# Titan canavarları için etiket ve liste kutusu
+lblTitanCount = QtBind.createLabel(gui, "Titan: 0", 10, 40)
+lstTitanCounter = QtBind.createList(gui, 10, 60, 300, 200)  # Titan geçmiş verileri (daha büyük)
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# Aktif/Pasif düğmesi
+btnToggleActive = QtBind.createButton(gui, "btnToggleActive_clicked", "Aktif", 120, 8)
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+# Item Counter Sağ Taraf
+lLMP = QtBind.createLabel(gui, 'Lucky Magic Powder:', 455, 55)
+qLMP = QtBind.createLabel(gui, '0', 585, 55)
 
-# Translations
-*.mo
-*.pot
+lSTRScroll = QtBind.createLabel(gui, 'STR Scroll:', 455, 75)
+qSTRScroll = QtBind.createLabel(gui, '0', 585, 75)
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+lINTScroll = QtBind.createLabel(gui, 'INT Scroll:', 455, 95)
+qINTScroll = QtBind.createLabel(gui, '0', 585, 95)
 
-# Flask stuff:
-instance/
-.webassets-cache
+lHPPotion = QtBind.createLabel(gui, 'HP+:', 455, 115)
+qHPPotion = QtBind.createLabel(gui, '0', 585, 115)
 
-# Scrapy stuff:
-.scrapy
+lMPPotion = QtBind.createLabel(gui, 'MP+:', 455, 135)
+qMPPotion = QtBind.createLabel(gui, '0', 585, 135)
 
-# Sphinx documentation
-docs/_build/
+lAccuracyScroll = QtBind.createLabel(gui, 'Accuracy 100%:', 455, 155)
+qAccuracyScroll = QtBind.createLabel(gui, '0', 585, 155)
 
-# PyBuilder
-.pybuilder/
-target/
+lEvasionScroll = QtBind.createLabel(gui, 'Evasion 100%:', 455, 175)
+qEvasionScroll = QtBind.createLabel(gui, '0', 585, 175)
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Butonlar (Sağ Alt Kısım)
+btnInventory = QtBind.createButton(gui, 'btnInventory_clicked', "  Inventory  ", 445, 205)
+btnPet = QtBind.createButton(gui, 'btnPet_clicked', "  Grab Pet  ", 548, 205)
+btnStorage = QtBind.createButton(gui, 'btnStorage_clicked', "  Storage  ", 445, 235)
+btnGuildStorage = QtBind.createButton(gui, 'btnGuildStorage_clicked', "  Guild Storage  ", 545, 235)
 
-# IPython
-profile_default/
-ipython_config.py
+# Titan sayaç değişkeni
+last_titan_seen_time = None
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+# Ayarlar
+CHECK_INTERVAL = 5.0  # Kontrol aralığı (saniye)
+isRunning = False  # Sayımın aktif olup olmadığını kontrol eder
+isBotActive = False  # Botun aktif olup olmadığını kontrol eder
+isPluginActive = False  # Eklentinin aktif olup olmadığını kontrol eder
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+# Önceki sayıyı saklamak için değişken
+previous_titan_count = 0
 
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
+# Sayımı başlatan fonksiyon
+def startCounter():
+    global isRunning  # Global değişkeni kullanacağımızı belirtiyoruz
+    if isRunning:
+        countTitans()
+        Timer(CHECK_INTERVAL, startCounter).start()
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+# Titan canavarlarını sayan fonksiyon
+def countTitans():
+    global previous_titan_count  # Global değişkeni kullanacağımızı belirtiyoruz
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
-.pdm.toml
-.pdm-python
-.pdm-build/
+    # Yarıçap değerini al
+    radius = QtBind.text(gui, tbxRadius)
+    try:
+        radius = float(radius)  # Yarıçapı sayıya dönüştür
+    except ValueError:
+        QtBind.setText(gui, lblTitanCount, "Geçersiz yarıçap!")
+        return
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
+    # Karakterin mevcut pozisyonunu al
+    position = get_position()
+    if not position:
+        QtBind.setText(gui, lblTitanCount, "Pozisyon yok!")
+        return
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+    # Titan türündeki canavarları say
+    titan_count = 0
+    monsters = get_monsters()
+    if not monsters:
+        QtBind.setText(gui, lblTitanCount, "Titan: 0")
+        return
 
-# SageMath parsed files
-*.sage.py
+    for key, mob in monsters.items():
+        # Titan türü (type = 5) ve belirtilen yarıçap içinde mi kontrol et
+        if mob['type'] == 5:  # 5 = Titan
+            distance = GetDistance(position['x'], position['y'], mob['x'], mob['y'])
+            if distance <= radius:
+                titan_count += 1
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+    # GUI'de Titan sayısını göster
+    QtBind.setText(gui, lblTitanCount, f"Titan: {titan_count}")
 
-# Spyder project settings
-.spyderproject
-.spyproject
+    # Eğer Titan sayısı değiştiyse, geçmiş verileri listeye ekle
+    if titan_count != previous_titan_count:
+        current_time = datetime.now().strftime("%H:%M")  # Saat ve dakika bilgisi
+        QtBind.append(gui, lstTitanCounter, f"{current_time} - Titan: {titan_count}")
+        previous_titan_count = titan_count  # Önceki sayıyı güncelle
 
-# Rope project settings
-.ropeproject
+# İki nokta arasındaki mesafeyi hesaplayan fonksiyon
+def GetDistance(ax, ay, bx, by):
+    return math.sqrt((bx - ax) ** 2 + (by - ay) ** 2)
 
-# mkdocs documentation
-/site
+# Karakter kasılma alanında mı kontrol eden fonksiyon
+def is_in_training_area():
+    # Aktif kasılma alanının bilgilerini al
+    training_area = get_training_area()
+    if not training_area:
+        return False
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+    # Karakterin mevcut pozisyonunu al
+    position = get_position()
+    if not position:
+        return False
 
-# Pyre type checker
-.pyre/
+    # Kasılma alanının merkezini ve yarıçapını al
+    center_x = training_area['x']
+    center_y = training_area['y']
+    radius = training_area['radius']
 
-# pytype static type analyzer
-.pytype/
+    # Karakterin kasılma alanında olup olmadığını kontrol et
+    distance = GetDistance(center_x, center_y, position['x'], position['y'])
+    return distance <= radius
 
-# Cython debug symbols
-cython_debug/
+# Bot durumunu kontrol eden fonksiyon
+def check_bot_status():
+    global isRunning, isBotActive  # Global değişkenleri kullanacağımızı belirtiyoruz
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+    # Eklenti aktif değilse, hiçbir şey yapma
+    if not isPluginActive:
+        return
 
-# Ruff stuff:
-.ruff_cache/
+    # Botun aktif olup olmadığını kontrol et
+    training_area = get_training_area()
+    if training_area:
+        isBotActive = True
+    else:
+        isBotActive = False
 
-# PyPI configuration file
-.pypirc
+    # Eğer bot aktifse, kasılma alanını kontrol et
+    if isBotActive:
+        if is_in_training_area():  # Karakter kasılma alanındaysa
+            if not isRunning:
+                isRunning = True
+                startCounter()  # Sayımı başlat
+        else:
+            if isRunning:
+                isRunning = False
+                QtBind.setText(gui, lblTitanCount, "Titan: 0")  # Sayımı durdur ve sayıyı sıfırla
+    else:
+        if isRunning:
+            isRunning = False
+            QtBind.setText(gui, lblTitanCount, "Titan: 0")  # Sayımı durdur ve sayıyı sıfırla
+
+    # 5 saniye sonra tekrar kontrol et
+    Timer(5.0, check_bot_status).start()
+
+# Aktif/Pasif düğmesine tıklandığında çağrılacak fonksiyon
+def btnToggleActive_clicked():
+    global isPluginActive, isRunning, previous_titan_count
+
+    # Eklentinin durumunu değiştir
+    isPluginActive = not isPluginActive
+
+    # Düğme metnini güncelle
+    if isPluginActive:
+        QtBind.setText(gui, btnToggleActive, "Pasif")
+        log("Plugin: Eklenti aktif edildi.")
+    else:
+        QtBind.setText(gui, btnToggleActive, "Aktif")
+        log("Plugin: Eklenti pasif edildi.")
+
+        # Eklenti pasifse, sayımı durdur ve GUI'yi sıfırla
+        isRunning = False
+        previous_titan_count = 0
+        QtBind.setText(gui, lblTitanCount, "Titan: 0")
+        QtBind.clear(gui, lstTitanCounter)  # Geçmiş verileri temizle
+
+    # Bot durumunu kontrol etmeye başla veya durdur
+    if isPluginActive:
+        check_bot_status()
+    else:
+        # Eklenti pasifse, sayımı durdur
+        isRunning = False
+        QtBind.setText(gui, lblTitanCount, "Titan: 0")
+
+# Envanterdeki itemleri say
+def countItems(countIn):
+    LMP = 0
+    STRScroll = 0
+    INTScroll = 0
+    HPPotion = 0
+    MPPotion = 0
+    AccuracyScroll = 0
+    EvasionScroll = 0
+
+    # İlgili bölümden itemleri al
+    items = []
+    if countIn == 'Storage':
+        items = get_storage()['items']
+    elif countIn == 'GuildStorage':
+        items = get_guild_storage()['items']
+    elif countIn == 'Inventory':
+        items = get_inventory()['items']
+    elif countIn == 'pet':
+        pet_items = get_pets()
+        for key in pet_items:
+            if pet_items[key]['type'] == 'pick':
+                items = pet_items[key]['items']
+
+    # Itemleri say
+    for item in items:
+        if item:
+            if "Lucky Magic Powder" in item['name']:
+                LMP += item['quantity']
+            elif "Strength Scroll" in item['name']:
+                STRScroll += item['quantity']
+            elif "Intelligence Scroll" in item['name']:
+                INTScroll += item['quantity']
+            elif "HP+" in item['name']:
+                HPPotion += item['quantity']
+            elif "MP+" in item['name']:
+                MPPotion += item['quantity']
+            elif "Accuracy 100%" in item['name']:
+                AccuracyScroll += item['quantity']
+            elif "Evasion 100%" in item['name']:
+                EvasionScroll += item['quantity']
+
+    # GUI'yi güncelle
+    QtBind.setText(gui, qLMP, str(LMP))
+    QtBind.setText(gui, qSTRScroll, str(STRScroll))
+    QtBind.setText(gui, qINTScroll, str(INTScroll))
+    QtBind.setText(gui, qHPPotion, str(HPPotion))
+    QtBind.setText(gui, qMPPotion, str(MPPotion))
+    QtBind.setText(gui, qAccuracyScroll, str(AccuracyScroll))
+    QtBind.setText(gui, qEvasionScroll, str(EvasionScroll))
+
+    # Loglama
+    log(f'[TitanTracker] {countIn} bölümündeki itemler sayıldı.')
+
+# Buton fonksiyonları
+def btnInventory_clicked():
+    countItems('Inventory')  # Envanterdeki itemleri say
+    log('[TitanTracker] Envanter kontrol edildi.')
+
+def btnPet_clicked():
+    countItems('pet')  # Grab Pet bölümündeki itemleri say
+    log('[TitanTracker] Grab Pet kontrol edildi.')
+
+def btnStorage_clicked():
+    countItems('Storage')  # Storage bölümündeki itemleri say
+    log('[TitanTracker] Storage kontrol edildi.')
+
+def btnGuildStorage_clicked():
+    countItems('GuildStorage')  # Guild Storage bölümündeki itemleri say
+    log('[TitanTracker] Guild Storage kontrol edildi.')
+
+# Plugin yüklendiğinde çağrılır
+def load():
+    log('Plugin: Titan Counter + Item Tracker yüklendi!')
+    countItems('Inventory')  # Başlangıçta envanterdeki itemleri say
+    check_bot_status()  # Bot durumunu kontrol et
+
+# Plugin kapatıldığında çağrılır
+def unload():
+    log('Plugin: Titan Counter + Item Tracker kapatıldı!')
+
+# Envanter değiştiğinde çağrılır
+def on_inventory_changed(added_items, removed_items):
+    countItems('Inventory')  # Envanter değişikliklerini takip et
